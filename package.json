@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "swarmwire-mobile",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "The swarmwire Android app -- send, download and forward any file or folder easily with QR codes.",
   "license": "MIT",

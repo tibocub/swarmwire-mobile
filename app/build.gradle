@@ -3,6 +3,10 @@ plugins {
   id "org.jetbrains.kotlin.android"
 }
 
+// The one place the version lives is package.json; 0.2.0 becomes versionName "0.2.0" and versionCode 200.
+def pkg = new groovy.json.JsonSlurper().parse(file("../package.json"))
+def (major, minor, patch) = pkg.version.tokenize(".").collect { it.toInteger() }
+
 android {
   namespace = "to.holepunch.bare.android"
   compileSdk = 35
@@ -11,9 +15,29 @@ android {
     applicationId = "to.holepunch.bare.android"
     minSdk = 29
     targetSdk = 35
-    versionCode = 1
-    versionName = "1.0"
-    ndk { abiFilters "x86_64", "arm64-v8a" }
+    versionCode = major * 10000 + minor * 100 + patch
+    versionName = pkg.version
+    // -Pabis=arm64-v8a builds phones only (what the release uses); the default also covers the emulator.
+    ndk { abiFilters(*(project.findProperty("abis") ?: "x86_64,arm64-v8a").split(",")) }
+  }
+
+  // Release builds are signed with the keystore the workflow provides; without one they fall back to the debug key.
+  signingConfigs {
+    release {
+      def keystore = System.getenv("KEYSTORE_FILE")
+      if (keystore) {
+        storeFile file(keystore)
+        storePassword System.getenv("KEYSTORE_PASSWORD")
+        keyAlias System.getenv("KEY_ALIAS") ?: "swarmwire"
+        keyPassword System.getenv("KEYSTORE_PASSWORD")
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      signingConfig = signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+    }
   }
 
   compileOptions {
