@@ -1,0 +1,9 @@
+.gradle/
+.cxx/
+.idea/
+build/
+prebuilds/
+node_modules/
+local.properties
+*.bundle
+*.zip
