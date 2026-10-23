@@ -12,7 +12,7 @@ android {
   compileSdk = 35
 
   defaultConfig {
-    applicationId = "to.holepunch.bare.android"
+    applicationId = "com.github.tibocub.swarmwire"
     minSdk = 29
     targetSdk = 35
     versionCode = major * 10000 + minor * 100 + patch

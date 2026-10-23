@@ -20,6 +20,7 @@ const swarm = new Hyperswarm()
 const node = new Swarmwire({ swarm })
 
 const entries = new Map() // root -> { id, kind, link, name, size, folder, path, temp, done, state, error, ... }
+let inspecting = 0 // folder lists being read: connections are wanted though the table is empty
 const counted = new WeakSet() // sources whose reads are counted for the upload speed
 
 const send = (msg) => BareKit.IPC.write(b4a.from(JSON.stringify(msg) + '\n'))
@@ -45,11 +46,17 @@ async function handle (msg) {
   else if (msg.type === 'serve') await serve(msg)
   else if (msg.type === 'deliver') { await deliver(msg.url, msg.link); send({ type: 'delivered' }) }
   else if (msg.type === 'stop') await stop(msg.id)
+  else if (msg.type === 'quit') { await node.destroy(); await swarm.destroy() }
 }
 
 // ---- looking before downloading ----
 
 async function inspect (link) {
+  inspecting++
+  try { await look(link) } finally { inspecting-- }
+}
+
+async function look (link) {
   const parsed = parseLink(link)
   const out = { type: 'inspected', link, name: safeName(parsed.name), size: parsed.size, folder: parsed.type === 'collection', private: !!parsed.secret }
 
@@ -149,7 +156,7 @@ async function stop (id) {
   const roots = [id, ...(node.lists.get(id) ?? []).map((f) => f.root)]
   if (entry.kind === 'seed') for (const root of roots.reverse()) await node.unserve(root) // files first: unserving the folder forgets its list
   tellPeersGone(roots)
-  if (!entries.size) for (const connection of swarm.connections) connection.destroy() // nothing left to talk about
+  if (!entries.size && !inspecting) for (const connection of swarm.connections) connection.destroy() // nothing left to talk about
 
   const rm = (path) => fs.promises.rm(path, { recursive: true, force: true }).catch(() => {})
   if (entry.temp) await rm(entry.dir)
@@ -232,6 +239,9 @@ const meter = {
   }
 }
 swarm.on('connection', (stream) => {
+  // Peers find us through old DHT records or reconnect on their own; with nothing shared or wanted, hang up
+  // instead of idling in their peer list.
+  if (!entries.size && !inspecting) return stream.destroy()
   meter.live.add(stream)
   stream.once('close', () => {
     meter.live.delete(stream)

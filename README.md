@@ -11,7 +11,7 @@ Built straight on [bare-kit](https://github.com/holepunchto/bare-kit): a small K
 Android 10 and above
 **No** iOS support planned for now
 
-"Save straight to Downloads/swarmwire" needs storage access: on Android 11 and later the app opens the *All files access* page in Settings; on Android 10 it asks for the ordinary storage permission. The Android 10 path is untested so far. Without it, downloads stay in app storage and you save them from the entry's menu.
+"Save straight to Downloads/swarmwire" needs *All files access*, an Android 11+ feature: the app opens that page in Settings. On Android 10 the checkbox is disabled; downloads stay in app storage and you save them from the entry's menu.
 
 
 ## Features
@@ -42,7 +42,6 @@ Kept here so none of it is forgotten:
 - **Library internals:** the per-item upload speed (counting reads of a source) and "tell peers we stopped sharing" (`unavailable`) reach into `swarmwire-lib`; both belong in the library (`Swarmwire.unserve` should announce it). The receiver hand-over (`deliver`) is a hand-kept copy of the CLI's `lib/rendezvous.js` and should move into the library too.
 - **After stopping:** peers stop counting the phone as a seeder at once, but one that was connected may reconnect for a moment before it gives up.
 - **Android 15** ends this kind of foreground service after about 6 hours; it would need restarting from `onTimeout`.
-- **App id:** it is still the template's `to.holepunch.bare.android`. Pick a real one before the first public release (it cannot change afterwards without being a different app).
 - **Other ideas:** send/get the clipboard through a QR code; Pear OTA updates.
 
 
@@ -108,7 +107,7 @@ gh secret set KEYSTORE_PASSWORD --repo tibocub/swarmwire-mobile        # paste t
 
 ```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n to.holepunch.bare.android/.MainActivity
+adb shell am start -n com.github.tibocub.swarmwire/to.holepunch.bare.android.MainActivity
 ```
 
 Or copy the APK to the phone and open it (allow installs from unknown sources).
@@ -119,7 +118,7 @@ Or copy the APK to the phone and open it (allow installs from unknown sources).
 ~/Android/Sdk/emulator/emulator -avd <your_avd> -no-audio -no-snapshot -cores 2   # opens a window
 adb wait-for-device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n to.holepunch.bare.android/.MainActivity
+adb shell am start -n com.github.tibocub.swarmwire/to.holepunch.bare.android.MainActivity
 adb emu kill            # when done: shuts the emulator down properly
 ```
 
@@ -139,12 +138,12 @@ npx swarmwire-cli get --qr          # or: show a code, scan it with Send's "Scan
 For the emulator, which has no camera, the app takes the scanned text from an intent instead (quote the link: `&` ends an adb shell command):
 
 ```sh
-adb shell "am start -n to.holepunch.bare.android/.MainActivity --es screen get --es scan '<link>'"
+adb shell "am start -n com.github.tibocub.swarmwire/to.holepunch.bare.android.MainActivity --es screen get --es scan '<link>'"
 # --es screen get|send|bridge   opens that popup
 # --es scan '<text>'            acts as if that QR code had just been scanned (Get then waits for you to tap Download)
 ```
 
-On a debug build, `adb shell run-as to.holepunch.bare.android find files/incoming` lists downloads still in app storage.
+On a debug build, `adb shell run-as com.github.tibocub.swarmwire find files/incoming` lists downloads still in app storage.
 
 
 ## Layout

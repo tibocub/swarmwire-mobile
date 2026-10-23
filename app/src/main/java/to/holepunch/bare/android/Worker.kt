@@ -14,6 +14,7 @@ class Worker(context: Context, private val onMessage: (JSONObject) -> Unit) {
   private val ipc: IPC
   private val main = Handler(Looper.getMainLooper())
   private var pending = ""
+  private var closing = false
 
   init {
     worklet.start("/app.bundle", context.assets.open("app.bundle"), arrayOf(context.filesDir.path))
@@ -37,7 +38,7 @@ class Worker(context: Context, private val onMessage: (JSONObject) -> Unit) {
           if (i < 0) break
           val line = pending.substring(0, i)
           pending = pending.substring(i + 1)
-          main.post { onMessage(JSONObject(line)) }
+          main.post { if (!closing) onMessage(JSONObject(line)) }
         }
       }
       if (e == null) read()
@@ -46,5 +47,11 @@ class Worker(context: Context, private val onMessage: (JSONObject) -> Unit) {
 
   fun suspend() = worklet.suspend()
   fun resume() = worklet.resume()
-  fun close() = worklet.terminate()
+
+  // Leave the swarm properly (peers notice at once, as with ctrl-c in the CLI) before ending the worklet.
+  fun close() {
+    closing = true
+    send("type" to "quit")
+    main.postDelayed({ worklet.terminate() }, 3000)
+  }
 }
