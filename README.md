@@ -27,21 +27,23 @@ Not yet: sending folders from the phone, resuming from a stored link, a release 
 Planned:
 - Preview files from a link/code and validate before starting download
 - Resume download
-- Sync (update an already downloaded file/folder)
+- Diff & Sync (update an already downloaded file/folder without re-downloading everyting)
 - Make transfer faster (currently ~5x slower on bare than node)
 - Optional direct fs access (download directly to desired folder instead of downloading first in the app's storage)
+- Maybe some other non-swarmwire QoL tools and features (send/get clipboard through QR code)
 
 
 ## Quickstart
-[Download the APK from this page's releases](https://github.com/tibocub/swarmwire-mobile/releases/latest)
-for Linux/Windows/Mac/BSD, see [swarmwire-cli](https://github.com/tibocub/swarmwire-cli)
+[Download the APK from this page's releases](https://github.com/tibocub/swarmwire-mobile/releases/latest).
+
+for Linux/Windows/Mac/BSD, see [swarmwire-cli](https://github.com/tibocub/swarmwire-cli).
 
 
 ## How it fits together
 
 ```
 Kotlin UI (MainActivity.kt)  <-- JSON lines over IPC -->  Bare worklet (app/src/main/js/app.js)
-   picker, buttons, camera                                  swarmwire-lib + hyperswarm
+  picker, buttons, camera                                     swarmwire-lib + hyperswarm
 ```
 
 - The worklet is bundled with `bare-pack` into `app/src/main/assets/app.bundle` during the Gradle build.
