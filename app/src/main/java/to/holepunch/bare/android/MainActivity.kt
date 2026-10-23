@@ -10,6 +10,8 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import android.os.Bundle
 import android.os.Environment
 import android.os.ParcelFileDescriptor
@@ -48,6 +50,7 @@ class MainActivity : Activity() {
 
   private var onScan: ((String) -> Unit)? = null
   private var onPicked: ((Uri) -> Unit)? = null
+  private var onFolder: ((Uri) -> Unit)? = null
   private var onSaveTarget: ((Uri) -> Unit)? = null
   private var onPopup: ((JSONObject) -> Unit)? = null // worklet messages for the open popup
   private var status: TextView? = null
@@ -204,27 +207,45 @@ class MainActivity : Activity() {
   // What tapping an entry offers.
   private fun menu(e: JSONObject) {
     val link = e.getString("link")
-    val saveable = e.optBoolean("temp") && e.getString("state") == "seeding"
-    val items = mutableListOf("Copy link to clipboard", "Show QR code", "Send to a device (scan its “get --qr” code)")
-    if (saveable) items.add("Save to phone…")
+    val done = e.getString("state") == "seeding"
+    val items = mutableListOf<Pair<String, () -> Unit>>()
 
-    AlertDialog.Builder(this).setTitle(e.getString("name")).setItems(items.toTypedArray()) { _, which ->
-      when (which) {
-        0 -> {
-          getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("swarmwire link", link))
-          toast("Link copied.")
-        }
-        1 -> showQr(e)
-        2 -> {
-          onScan = { text ->
-            if (text.startsWith("swarmwire-recv://")) { toast("Sending the link…"); worker.send("type" to "deliver", "url" to text, "link" to link) }
-            else toast("That is not a receiver's code. Use the one “swarmwire get --qr” shows.")
-          }
-          scan()
-        }
-        3 -> save(e)
+    // A file or folder of ours the phone can show: not one only held as an open descriptor, and not a
+    // folder in app storage, which no file manager can enter.
+    if (done && !e.isNull("path") && !e.getString("path").startsWith("fd:") && !(e.optBoolean("temp") && e.getBoolean("folder")))
+      items.add("Open" to { open(e) })
+    items.add("Copy link to clipboard" to {
+      getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("swarmwire link", link))
+      toast("Link copied.")
+    })
+    items.add("Show QR code" to { showQr(e) })
+    items.add("Send to a device (scan its “get --qr” code)" to {
+      onScan = { text ->
+        if (text.startsWith("swarmwire-recv://")) { toast("Sending the link…"); worker.send("type" to "deliver", "url" to text, "link" to link) }
+        else toast("That is not a receiver's code. Use the one “swarmwire get --qr” shows.")
       }
-    }.show()
+      scan()
+    })
+    if (e.optBoolean("temp") && done) items.add("Save to phone…" to { save(e) })
+
+    AlertDialog.Builder(this).setTitle(e.getString("name")).setItems(items.map { it.first }.toTypedArray()) { _, which -> items[which].second() }.show()
+  }
+
+  // A file goes to whatever app views it; a folder opens in the Files app (only possible in shared storage).
+  private fun open(e: JSONObject) {
+    val file = File(e.getString("path"))
+    try {
+      val intent = if (e.getBoolean("folder")) {
+        val relative = file.path.removePrefix(Environment.getExternalStorageDirectory().path + "/")
+        Intent(Intent.ACTION_VIEW).setDataAndType(DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:$relative"), DocumentsContract.Document.MIME_TYPE_DIR)
+      } else {
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+        Intent(Intent.ACTION_VIEW).setDataAndType(FileProvider.getUriForFile(this, "$packageName.files", file), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      startActivity(intent)
+    } catch (ex: Exception) {
+      toast("Nothing on this phone can open that (${ex.message}).")
+    }
   }
 
   private fun showQr(e: JSONObject) {
@@ -247,10 +268,10 @@ class MainActivity : Activity() {
     body.addView(status)
 
     open?.dismiss() // one popup at a time
-    onScan = null; onPicked = null; onPopup = null
+    onScan = null; onPicked = null; onFolder = null; onPopup = null
     open = AlertDialog.Builder(this).setTitle(title).setView(ScrollView(this).apply { addView(body) })
       .setNegativeButton("Close", null).create().apply {
-        setOnDismissListener { onScan = null; onPicked = null; onPopup = null; status = null }
+        setOnDismissListener { onScan = null; onPicked = null; onFolder = null; onPopup = null; status = null }
         show()
       }
   }
@@ -323,6 +344,7 @@ class MainActivity : Activity() {
     popup("Send") {
       addView(hidden)
       button("Choose a file") { pickFile() }
+      button("Choose a folder") { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK_FOLDER) }
       addView(qr); addView(shown); addView(receiver)
     }
     onPicked = { uri ->
@@ -332,6 +354,26 @@ class MainActivity : Activity() {
         say("Preparing…")
         worker.send("type" to "serve", "path" to "fd:${pfd.fd}", "name" to displayName(uri), "private" to hidden.isChecked)
       }
+    }
+    onFolder = { tree ->
+      say("Reading the folder…")
+      Thread {
+        val files = mutableListOf<Pair<String, ParcelFileDescriptor>>()
+        try {
+          walk(tree, DocumentsContract.getTreeDocumentId(tree), "", files)
+          runOnUiThread {
+            if (files.isEmpty()) say("That folder has no files.") else {
+              held.addAll(files.map { it.second })
+              say("Preparing ${files.size} files…")
+              val list = org.json.JSONArray(files.map { (path, pfd) -> JSONObject().put("path", path).put("fd", pfd.fd) })
+              worker.send("type" to "serve", "files" to list, "name" to folderName(tree), "private" to hidden.isChecked)
+            }
+          }
+        } catch (ex: Exception) {
+          files.forEach { it.second.close() }
+          runOnUiThread { say("Could not read that folder: ${ex.message}") }
+        }
+      }.start()
     }
     onPopup = { m ->
       when (m.getString("type")) {
@@ -468,7 +510,28 @@ class MainActivity : Activity() {
 
   private fun scan() {
     IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setBeepEnabled(false)
-      .setOrientationLocked(false).setPrompt("").initiateScan()
+      .setOrientationLocked(true).setPrompt("").initiateScan()
+  }
+
+  // Every file under a picked folder, opened. shortcut: one descriptor per file stays open while it is
+  // served, so a folder of many thousands of files may hit the per-app limit; upgrade by opening lazily.
+  private fun walk(tree: Uri, parent: String, prefix: String, out: MutableList<Pair<String, ParcelFileDescriptor>>) {
+    val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parent)
+    val columns = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE)
+    contentResolver.query(children, columns, null, null, null)?.use { c ->
+      while (c.moveToNext()) {
+        val id = c.getString(0)
+        val path = if (prefix.isEmpty()) c.getString(1) else "$prefix/${c.getString(1)}"
+        if (c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR) walk(tree, id, path, out)
+        else out.add(path to contentResolver.openFileDescriptor(DocumentsContract.buildDocumentUriUsingTree(tree, id), "r")!!)
+      }
+    }
+  }
+
+  private fun folderName(tree: Uri): String {
+    val doc = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+    return contentResolver.query(doc, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+      ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "folder"
   }
 
   private fun pickFile() {
@@ -481,6 +544,7 @@ class MainActivity : Activity() {
     if (resultCode != RESULT_OK) return
     when (requestCode) {
       PICK_FILE -> onPicked?.invoke(uri)
+      PICK_FOLDER -> onFolder?.invoke(uri)
       SAVE_FILE, SAVE_TREE -> onSaveTarget?.invoke(uri)
     }
   }
@@ -517,5 +581,6 @@ class MainActivity : Activity() {
     const val PICK_FILE = 1
     const val SAVE_FILE = 2
     const val SAVE_TREE = 3
+    const val PICK_FOLDER = 5
   }
 }

@@ -5,7 +5,7 @@
 //
 //   UI -> here   {type:'inspect', link}                      what a link holds, before anything is fetched
 //                {type:'get', link, name, dest}              download; dest is a folder, or null for app storage
-//                {type:'serve', path, name, private}         share a file (path may be `fd:N`)
+//                {type:'serve', path | files, name, private}  share a file (path may be `fd:N`) or a folder (files: [{path, fd}])
 //                {type:'deliver', url, link}                 hand a link to a `swarmwire-recv://` meeting point
 //                {type:'stop', id}                           stop a download or a seed
 //   here -> UI   ready | list | inspected | link | delivered | error
@@ -133,10 +133,13 @@ async function downloadFolder (entry, parsed) {
 
 // ---- sharing ----
 
-async function serve ({ path, name, private: hidden }) {
+// `files` ([{path, fd}]) shares a folder the phone can only reach file by file.
+async function serve ({ path, files, name, private: hidden }) {
   const secret = hidden ? b4a.toString(randomBytes(32), 'hex') : null
-  const { root, size, link } = await node.serve(path, { name, secret })
-  add({ id: root, kind: 'seed', link, name, size, folder: false, path, done: size, finished: true, hidden: !!hidden })
+  const { root, size, link } = files
+    ? await node.serveCollection(null, { name, secret, files: files.map((f) => ({ path: f.path, from: `fd:${f.fd}` })) })
+    : await node.serve(path, { name, secret })
+  add({ id: root, kind: 'seed', link, name, size, folder: !!files, path: path ?? null, done: size, finished: true, hidden: !!hidden })
   send({ type: 'link', link, name })
 }
 

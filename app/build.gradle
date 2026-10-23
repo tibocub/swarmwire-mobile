@@ -36,6 +36,9 @@ android {
 
   buildTypes {
     release {
+      minifyEnabled true // the Kotlin side is small, but the scanner library is not
+      shrinkResources true
+      proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
       signingConfig = signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
     }
   }
@@ -47,6 +50,13 @@ android {
 
   kotlinOptions {
     jvmTarget = "17"
+  }
+
+  // Compress the native libraries in the APK (the Bare runtime alone is 65 MB); Android unpacks them at install.
+  packaging {
+    jniLibs {
+      useLegacyPackaging = true
+    }
   }
 
   sourceSets {

@@ -35,7 +35,7 @@ A foreground notification keeps the app running with the screen off or another a
 
 Kept here so none of it is forgotten:
 
-- **Folders from the phone:** sending a folder needs all-files access or one descriptor per file. Only single files can be sent for now.
+- **Big folders from the phone:** a sent folder keeps one file descriptor open per file, so a folder of many thousands of files may hit the per-app limit.
 - **Keep the list across app restarts:** downloads and seeds are forgotten when the app is closed, so there is no resume from a stored link yet (a download restarted from its link does resume from what was verified). The CLI could store link and partial file the same way.
 - **Diff & Sync:** update an already downloaded file or folder without fetching everything again.
 - **Picked files stay open:** the descriptor of a file chosen in Send is only released when the app closes, not when its entry is removed.
@@ -82,7 +82,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # your SDK path
 
 The APK is `app/build/outputs/apk/debug/app-debug.apk`. The first build takes a couple of minutes.
 It is about 140 MB because the debug build ships unstripped bare-kit libraries for `arm64-v8a` and `x86_64`;
-`./gradlew assembleRelease -Pabis=arm64-v8a` makes the 75 MB phone-only release (signed with the debug key unless a keystore is configured, see Releasing).
+`./gradlew assembleRelease -Pabis=arm64-v8a` makes the phone-only release (about 20 MB) (signed with the debug key unless a keystore is configured, see Releasing).
 
 
 ## Releasing

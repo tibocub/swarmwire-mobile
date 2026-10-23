@@ -1,0 +1,4 @@
+<paths>
+  <files-path name="app" path="."/>
+  <external-path name="shared" path="."/>
+</paths>

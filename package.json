@@ -10,7 +10,7 @@
     "bare-fs": "^4.8.2",
     "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.2",
-    "swarmwire-lib": "^0.4.1"
+    "swarmwire-lib": "^0.5.0"
   },
   "devDependencies": {
     "bare-link": "^1.2.0",
