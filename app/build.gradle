@@ -1,0 +1,67 @@
+plugins {
+  id "com.android.application"
+  id "org.jetbrains.kotlin.android"
+}
+
+android {
+  namespace = "to.holepunch.bare.android"
+  compileSdk = 35
+
+  defaultConfig {
+    applicationId = "to.holepunch.bare.android"
+    minSdk = 29
+    targetSdk = 35
+    versionCode = 1
+    versionName = "1.0"
+    ndk { abiFilters "x86_64", "arm64-v8a" }
+  }
+
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  sourceSets {
+    main {
+      jniLibs.srcDirs "src/main/addons", "libs/bare-kit/jni"
+    }
+  }
+}
+
+tasks.register("link", Exec) {
+  workingDir ".."
+
+  commandLine([
+    "node_modules/.bin/bare-link",
+    "--preset", "android",
+    "--needs", "libbare-kit.so",
+    "--out", "app/src/main/addons"
+  ])
+}
+
+tasks.register("packApp", Exec) {
+  workingDir ".."
+
+  commandLine([
+    "node_modules/.bin/bare-pack",
+    "--preset", "android",
+    "--out", "app/src/main/assets/app.bundle",
+    "app/src/main/js/app.js"
+  ])
+}
+
+tasks.register("pack") {
+  dependsOn packApp
+}
+
+preBuild.dependsOn link, pack
+
+dependencies {
+  api fileTree(dir: "libs", include: ["bare-kit/classes.jar"])
+  implementation "com.journeyapps:zxing-android-embedded:4.3.0"
+  implementation "androidx.core:core:1.13.1" // ContextCompat, which the scanner expects the app to provide
+}
