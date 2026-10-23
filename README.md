@@ -11,6 +11,8 @@ Built straight on [bare-kit](https://github.com/holepunchto/bare-kit): a small K
 Android 10 and above
 **No** iOS support planned for now
 
+"Save straight to Downloads/swarmwire" needs storage access: on Android 11 and later the app opens the *All files access* page in Settings; on Android 10 it asks for the ordinary storage permission. The Android 10 path is untested so far. Without it, downloads stay in app storage and you save them from the entry's menu.
+
 
 ## Features
 
@@ -29,12 +31,19 @@ Downloads go to app storage by default, then **Save to phone…** moves them whe
 
 A foreground notification keeps the app running with the screen off or another app in front, and shows the total download progress, or "Seeding" when it is only sharing. The back button leaves the app running; ✕ or Stop all ends the transfers.
 
-Not yet: sending folders from the phone, keeping the list across app restarts (so resuming a download from a stored link), diff and sync.
+## To do and known limits
 
-Planned:
-- Resume download
-- Diff & Sync (update an already downloaded file/folder without re-downloading everyting)
-- Maybe some other non-swarmwire QoL tools and features (send/get clipboard through QR code)
+Kept here so none of it is forgotten:
+
+- **Folders from the phone:** sending a folder needs all-files access or one descriptor per file. Only single files can be sent for now.
+- **Keep the list across app restarts:** downloads and seeds are forgotten when the app is closed, so there is no resume from a stored link yet (a download restarted from its link does resume from what was verified). The CLI could store link and partial file the same way.
+- **Diff & Sync:** update an already downloaded file or folder without fetching everything again.
+- **Picked files stay open:** the descriptor of a file chosen in Send is only released when the app closes, not when its entry is removed.
+- **Library internals:** the per-item upload speed (counting reads of a source) and "tell peers we stopped sharing" (`unavailable`) reach into `swarmwire-lib`; both belong in the library (`Swarmwire.unserve` should announce it). The receiver hand-over (`deliver`) is a hand-kept copy of the CLI's `lib/rendezvous.js` and should move into the library too.
+- **After stopping:** peers stop counting the phone as a seeder at once, but one that was connected may reconnect for a moment before it gives up.
+- **Android 15** ends this kind of foreground service after about 6 hours; it would need restarting from `onTimeout`.
+- **App id:** it is still the template's `to.holepunch.bare.android`. Pick a real one before the first public release (it cannot change afterwards without being a different app).
+- **Other ideas:** send/get the clipboard through a QR code; Pear OTA updates.
 
 
 ## Quickstart
