@@ -14,22 +14,26 @@ Android 10 and above
 
 ## Features
 
-| Screen | What it does |
+The main screen lists everything you are downloading or sharing, with progress, up/down speed and seeders/peers for each. The ✕ stops one (a download in app storage is deleted with it). Tap an entry to **copy its link**, **show its QR code**, **send it to a device** (scan the code `swarmwire get --qr` shows on a computer), or **save it to phone** when it sits in app storage.
+
+Send, Get and Bridge are buttons at the bottom that open popups, which stay open so you can do several things in a row:
+
+| Popup | What it does |
 | --- | --- |
-| **Send** | choose a file (served in place, never copied) and show its link as text and a QR code; optionally scan a receiver's code (`swarmwire get --qr` on a computer) to hand the link over |
-| **Get** | scan a link's QR code, or paste the link; downloads into app storage, then **Save to phone…** moves it where you pick (a file, or a folder for folder links) and frees the app copy |
-| **Bridge** | scan a sender's QR code, then a receiver's: the receiver downloads straight from the sender, the file never goes through the phone |
+| **Send** | choose a file (served in place, never copied), optionally **private** (only people holding the link can find it), and show its link as text and a QR code; scan as many receivers' codes as you like to hand the link over |
+| **Get** | scan a link's QR code, or paste the link; shows what it holds (a folder's files too) and lets you rename it, then downloads once you validate. Scan another right away |
+| **Bridge** | scan a sender's QR code once, then any number of receivers' codes: each receiver downloads straight from the sender, the file never goes through the phone |
+| **Stop all** | stops every download and share |
 
-While a transfer or a shared file is active, a foreground service (a notification) keeps the app running with the screen off or another app in front. "Stop sharing in the background" ends it.
+Downloads go to app storage by default, then **Save to phone…** moves them where you pick. Tick *Save straight to Downloads/swarmwire* to skip that: it needs "all files access", which Android only lets you grant in Settings (the app opens the page). A finished download is kept and shared on until you remove it.
 
-Not yet: sending folders from the phone, resuming from a stored link, a release (signed) build.
+A foreground notification keeps the app running with the screen off or another app in front, and shows the total download progress, or "Seeding" when it is only sharing. The back button leaves the app running; ✕ or Stop all ends the transfers.
+
+Not yet: sending folders from the phone, keeping the list across app restarts (so resuming a download from a stored link), diff and sync.
 
 Planned:
-- Preview files from a link/code and validate before starting download
 - Resume download
 - Diff & Sync (update an already downloaded file/folder without re-downloading everyting)
-- Make transfer faster (currently ~5x slower on bare than node)
-- Optional direct fs access (download directly to desired folder instead of downloading first in the app's storage)
 - Maybe some other non-swarmwire QoL tools and features (send/get clipboard through QR code)
 
 
@@ -56,7 +60,7 @@ Kotlin UI (MainActivity.kt)  <-- JSON lines over IPC -->  Bare worklet (app/src/
 You need Node 20+, JDK 17+, the Android SDK (platform 35) and the [GitHub CLI](https://cli.github.com).
 
 ```sh
-npm install   # swarmwire-lib is taken from ../swarmwire for now
+npm install
 
 # one-off: the bare-kit prebuild (not in git)
 gh release download --repo holepunchto/bare-kit v2.5.5 --pattern prebuilds.zip
@@ -69,7 +73,24 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # your SDK path
 ```
 
 The APK is `app/build/outputs/apk/debug/app-debug.apk`. The first build takes a couple of minutes.
-It is about 140 MB because the debug build ships unstripped bare-kit libraries for `arm64-v8a` and `x86_64`.
+It is about 140 MB because the debug build ships unstripped bare-kit libraries for `arm64-v8a` and `x86_64`;
+`./gradlew assembleRelease -Pabis=arm64-v8a` makes the 75 MB phone-only release (signed with the debug key unless a keystore is configured, see Releasing).
+
+
+## Releasing
+
+`package.json` holds the version; the app's version name and code follow it. To release:
+
+1. Edit `"version"` in `package.json` (and keep to plain `major.minor.patch`), commit and push to `main`.
+2. The *Build and release* workflow builds a signed APK and publishes it as release `v<version>` with generated notes. A push that does not change the version only builds.
+
+**One-off setup** (the signing key, which must stay the same for updates to install over older versions; back up `~/swarmwire-release.jks` and its password):
+
+```sh
+keytool -genkeypair -keystore ~/swarmwire-release.jks -alias swarmwire -keyalg RSA -keysize 4096 -validity 36500
+base64 -w0 ~/swarmwire-release.jks | gh secret set KEYSTORE_BASE64 --repo tibocub/swarmwire-mobile
+gh secret set KEYSTORE_PASSWORD --repo tibocub/swarmwire-mobile        # paste the password; use it for the key too
+```
 
 
 ## Run
@@ -106,26 +127,27 @@ npx swarmwire-cli get "<the link shown in the app>"
 npx swarmwire-cli get --qr          # or: show a code, scan it with Send's "Scan a receiver's code"
 ```
 
-For the emulator, which has no camera, the app takes the scanned text from an intent instead:
+For the emulator, which has no camera, the app takes the scanned text from an intent instead (quote the link: `&` ends an adb shell command):
 
 ```sh
 adb shell "am start -n to.holepunch.bare.android/.MainActivity --es screen get --es scan '<link>'"
-# --es screen get|send|bridge   opens that screen
-# --es scan '<text>'            acts as if that QR code had just been scanned
+# --es screen get|send|bridge   opens that popup
+# --es scan '<text>'            acts as if that QR code had just been scanned (Get then waits for you to tap Download)
 ```
 
-On a debug build, `adb shell run-as to.holepunch.bare.android find files/incoming` lists unsaved downloads.
+On a debug build, `adb shell run-as to.holepunch.bare.android find files/incoming` lists downloads still in app storage.
 
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `app/src/main/java/.../MainActivity.kt` | the screens, file picker, scanner, saving |
+| `app/src/main/java/.../MainActivity.kt` | the list, the popups, file picker, scanner, saving |
 | `app/src/main/java/.../KeepAlive.kt` | the foreground service that keeps transfers running in the background |
 | `app/src/main/java/.../Worker.kt` | the worklet, spoken to in JSON lines |
 | `app/src/main/java/.../Qr.kt` | QR bitmap |
-| `app/src/main/js/app.js` | the worklet: swarmwire (serve, get, deliver) behind IPC |
+| `app/src/main/js/app.js` | the worklet: the table of transfers (inspect, get, serve, deliver, stop) behind IPC |
+| `.github/workflows/release.yml` | builds every push, publishes a release for a new version |
 | `app/libs/bare-kit/` | bare-kit prebuild (git-ignored, see Build) |
 
 
