@@ -82,7 +82,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # your SDK path
 
 The APK is `app/build/outputs/apk/debug/app-debug.apk`. The first build takes a couple of minutes.
 It is about 140 MB because the debug build ships unstripped bare-kit libraries for `arm64-v8a` and `x86_64`;
-`./gradlew assembleRelease -Pabis=arm64-v8a` makes the phone-only release (about 20 MB) (signed with the debug key unless a keystore is configured, see Releasing).
+`./gradlew assembleRelease -Pabis=arm64-v8a` makes the phone-only release (about 25 MB) (signed with the debug key unless a keystore is configured, see Releasing).
 
 
 ## Releasing
