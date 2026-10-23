@@ -1,0 +1,79 @@
+# Builds the APK on every push and pull request to main. When a push to main carries a version in
+# package.json that has no GitHub release yet, it also signs the APK and publishes it as release v<version>.
+# So releasing is: change "version" in package.json, commit, push to main.
+name: Build and release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write # creating a release
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Read the version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Is this version already released?
+        id: released
+        run: |
+          if gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: npm ci
+
+      # The bare-kit prebuild is not in git.
+      - name: Fetch bare-kit
+        run: |
+          gh release download --repo holepunchto/bare-kit v2.5.5 --pattern prebuilds.zip
+          unzip -q prebuilds.zip "android/*" -d prebuilds/
+          mv prebuilds/android/bare-kit app/libs/
+
+      - name: Set up the signing key
+        if: github.event_name == 'push' && steps.released.outputs.yes == 'false'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Add the KEYSTORE_BASE64 and KEYSTORE_PASSWORD secrets (see the README, 'Releasing')."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: ./gradlew assembleRelease -Pabis=arm64-v8a
+
+      - name: Publish the release
+        if: github.event_name == 'push' && steps.released.outputs.yes == 'false'
+        run: |
+          apk="$RUNNER_TEMP/swarmwire-${{ steps.version.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          gh release create "v${{ steps.version.outputs.version }}" "$apk" \
+            --target "$GITHUB_SHA" --title "v${{ steps.version.outputs.version }}" --generate-notes
