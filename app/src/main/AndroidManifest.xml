@@ -4,6 +4,7 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
   <application android:label="swarmwire" android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
     <service android:name=".KeepAlive" android:exported="false" android:foregroundServiceType="dataSync"/>
     <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:configChanges="orientation|screenSize|keyboardHidden">

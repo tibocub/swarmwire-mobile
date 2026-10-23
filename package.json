@@ -8,6 +8,7 @@
   "dependencies": {
     "b4a": "^1.9.0",
     "bare-fs": "^4.8.2",
+    "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.2",
     "swarmwire-lib": "^0.4.1"
   },
