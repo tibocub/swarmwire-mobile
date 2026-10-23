@@ -145,10 +145,12 @@ async function stop (id) {
   entry.reading?.stop()
   await entry.session?.destroy?.()
   await entry.download?.stop()
-  if (entry.kind === 'seed' && entry.finished) {
-    for (const file of node.lists.get(id) ?? []) await node.unserve(file.root)
-    await node.unserve(id)
-  }
+
+  const roots = [id, ...(node.lists.get(id) ?? []).map((f) => f.root)]
+  if (entry.kind === 'seed') for (const root of roots.reverse()) await node.unserve(root) // files first: unserving the folder forgets its list
+  tellPeersGone(roots)
+  if (!entries.size) for (const connection of swarm.connections) connection.destroy() // nothing left to talk about
+
   const rm = (path) => fs.promises.rm(path, { recursive: true, force: true }).catch(() => {})
   if (entry.temp) await rm(entry.dir)
   else if (entry.kind === 'download' && !entry.finished) { // an unfinished file in a shared folder is a full-size placeholder: do not leave it
@@ -157,12 +159,20 @@ async function stop (id) {
   }
 }
 
+// unserve stops answering but never says so, so peers would keep counting us as a seeder of it.
+// shortcut: uses the library's peer table and its `unavailable` message; belongs in Swarmwire.unserve.
+function tellPeersGone (roots) {
+  for (const peer of node.peers.values()) {
+    for (const root of roots) peer.send.unavailable({ root: b4a.from(root, 'hex') })
+  }
+}
+
 // ---- the table ----
 
 function add (entry) {
-  Object.assign(entry, { done: 0, state: 'connecting', error: null, finished: false, down: 0, up: 0, upBytes: 0, last: { done: 0, up: 0, at: Date.now() } }, entry)
-  entries.set(entry.id, entry)
-  return entry
+  const added = { done: 0, state: 'connecting', error: null, finished: false, down: 0, up: 0, upBytes: 0, last: { done: 0, up: 0, at: Date.now() }, ...entry }
+  entries.set(added.id, added)
+  return added
 }
 
 setInterval(() => {

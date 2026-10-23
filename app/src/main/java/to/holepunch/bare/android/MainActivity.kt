@@ -8,6 +8,8 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.ParcelFileDescriptor
@@ -67,7 +69,7 @@ class MainActivity : Activity() {
 
     speeds = TextView(this).apply { gravity = Gravity.END }
     directBox = CheckBox(this).apply {
-      text = "Save straight to Downloads/swarmwire (needs all-files access)"
+      text = "Save straight to Downloads/swarmwire (asks for storage access)"
       isChecked = getPreferences(MODE_PRIVATE).getBoolean("direct", false)
       setOnCheckedChangeListener { _, on -> direct(on) }
     }
@@ -94,7 +96,7 @@ class MainActivity : Activity() {
     }
     setContentView(root)
 
-    if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+    if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
       requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 0) // without it the service still runs, just unseen
 
     worker = Worker(this) { onMessage(it) }
@@ -380,11 +382,28 @@ class MainActivity : Activity() {
   private fun destination(): String? =
     if (directBox.isChecked) File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "swarmwire").path else null
 
-  // Writing into shared storage by path needs "all files access", which only the user can grant in Settings.
+  // Writing into shared storage by path needs "all files access" on Android 11+ (only the user can grant it,
+  // in Settings) and the ordinary storage permission on Android 10, which still allows it.
+  private fun storageGranted() =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+    else checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+
   private fun direct(on: Boolean) {
     getPreferences(MODE_PRIVATE).edit().putBoolean("direct", on).apply()
-    if (on && !Environment.isExternalStorageManager())
-      startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+    if (!on || storageGranted()) return
+
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+        startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+      else requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), STORAGE)
+    } catch (e: Exception) { // some phones have no such Settings page
+      directBox.isChecked = false
+      toast("Could not ask for storage access: ${e.message}")
+    }
+  }
+
+  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grants: IntArray) {
+    if (requestCode == STORAGE && grants.firstOrNull() != PackageManager.PERMISSION_GRANTED) directBox.isChecked = false
   }
 
   // ---- saving a finished download out of app storage ----
@@ -495,7 +514,7 @@ class MainActivity : Activity() {
   override fun onResume() {
     super.onResume()
     worker.resume()
-    if (directBox.isChecked && !Environment.isExternalStorageManager()) directBox.isChecked = false // not granted in Settings
+    if (directBox.isChecked && !storageGranted()) directBox.isChecked = false // not granted in Settings
   }
 
   override fun onDestroy() { super.onDestroy(); stopService(Intent(this, KeepAlive::class.java)); worker.close() }
@@ -504,5 +523,6 @@ class MainActivity : Activity() {
     const val PICK_FILE = 1
     const val SAVE_FILE = 2
     const val SAVE_TREE = 3
+    const val STORAGE = 4
   }
 }
