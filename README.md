@@ -9,9 +9,17 @@ Built straight on [bare-kit](https://github.com/holepunchto/bare-kit): a small K
 ## Support
 
 Android 10 and above
+
 **No** iOS support planned for now
 
 "Save straight to Downloads/swarmwire" needs *All files access*, an Android 11+ feature: the app opens that page in Settings. On Android 10 the checkbox is disabled; downloads stay in app storage and you save them from the entry's menu.
+
+
+## Quickstart
+[Download the APK from this page's releases](https://github.com/tibocub/swarmwire-mobile/releases/latest).
+
+for Linux/Windows/Mac/BSD, see [swarmwire-cli](https://github.com/tibocub/swarmwire-cli).
+
 
 
 ## Features
@@ -33,8 +41,6 @@ A foreground notification keeps the app running with the screen off or another a
 
 ## To do and known limits
 
-Kept here so none of it is forgotten:
-
 - **Big folders from the phone:** a sent folder keeps one file descriptor open per file, so a folder of many thousands of files may hit the per-app limit.
 - **Keep the list across app restarts:** downloads and seeds are forgotten when the app is closed, so there is no resume from a stored link yet (a download restarted from its link does resume from what was verified). The CLI could store link and partial file the same way.
 - **Diff & Sync:** update an already downloaded file or folder without fetching everything again.
@@ -45,21 +51,14 @@ Kept here so none of it is forgotten:
 - **Other ideas:** send/get the clipboard through a QR code; Pear OTA updates.
 
 
-## Quickstart
-[Download the APK from this page's releases](https://github.com/tibocub/swarmwire-mobile/releases/latest).
-
-for Linux/Windows/Mac/BSD, see [swarmwire-cli](https://github.com/tibocub/swarmwire-cli).
-
-
 ## How it fits together
 
-```
-Kotlin UI (MainActivity.kt)  <-- JSON lines over IPC -->  Bare worklet (app/src/main/js/app.js)
-  picker, buttons, camera                                     swarmwire-lib + hyperswarm
-```
+The UI in Kotlin handles the camera, the buttons, etc.
+Bare is our JS runtime for swarmwire-lib + hyperswarm.
+Both communicate with JSON over an IPC.
 
 - The worklet is bundled with `bare-pack` into `app/src/main/assets/app.bundle` during the Gradle build.
-- Scanning uses [ZXing](https://github.com/journeyapps/zxing-android-embedded) (no Google Play Services needed).
+- QR code scanning uses [ZXing](https://github.com/journeyapps/zxing-android-embedded) (no Google Play Services needed).
 - Files picked on Android have no readable path, so Kotlin hands the worklet a raw descriptor (`fd:N`) and the worklet uses `fstat`/`read` on it.
 
 
